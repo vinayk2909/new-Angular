@@ -1,0 +1,261 @@
+Article.ts
+
+export class Article {
+   constructor(public ModuleId: string, public name: string, public DateCreated: string, public DateModified: string) { 
+   }
+} 
+
+
+
+
+
+
+article.component.html
+
+<img class="img-responsive" src="assets/images/bri.jpg" height="50px" width="150px">
+<h1>Welcome to BridgeSoft Solutions</h1>
+<br><br>
+
+<h3>Article Details</h3>
+<table>
+  <tr><th> Module_Id</th> <th>Module_Name</th><th>DATE_CREATED</th><th>DATE_MODIFIED</th></tr>
+  <tr *ngFor="let article of allArticles" >
+    <td>{{article.ModuleId}}</td> <td>{{article.name}}</td> <td>{{article.DateCreated}}</td> <td>{{article.DateModified}}</td>
+	<td><button type="button" (click)="loadArticleToEdit(article.ModuleId)">Edit</button> </td> 
+	<td><button type="button" (click)="deleteArticle(article.ModuleId)">Delete</button></td>
+  </tr>
+</table>
+<br><br><br>
+<h3 *ngIf="articleIdToUpdate; else create"> 
+   Update Article for Id: {{articleIdToUpdate}}
+</h3>
+
+<div>
+ <form [formGroup]="articleForm" (ngSubmit)="onArticleFormSubmit()">
+  <table>
+    <tr><td>Enter Module_Name</td><td><input formControlName="title">
+	       <label *ngIf="articleForm.get('title').invalid && processValidation" [ngClass] = "'error'"> Module_Name is required. </label>
+   	</td></tr>
+    <tr><td>Enter DATE_CREATED</td><td><input formControlName="category">
+	       <label *ngIf="articleForm.get('category').invalid && processValidation" [ngClass] = "'error'"> DATE_CREATED is required. </label>
+	</td></tr>	
+	<tr><td>Enter DATE_MODIFIED</td><td><input formControlName="category">
+	       <label *ngIf="articleForm.get('category').invalid && processValidation" [ngClass] = "'error'"> DATE_MODIFIED is required. </label>
+	</td></tr>	
+    <tr><td colspan="2">
+	    
+		<button *ngIf="articleIdToUpdate">UPDATE</button>  
+	   
+	</td></tr>
+  </table>
+ </form> 
+ <br/>
+ <div *ngIf="statusCode; else processing">
+   <div *ngIf="statusCode === 201" [ngClass] = "'success'">
+	    		Module added successfully.
+   </div>   
+   <div *ngIf="statusCode === 409" [ngClass] = "'success'">
+        Module already exists.
+   </div>   	
+   <div *ngIf="statusCode === 200" [ngClass] = "'success'">
+        Module updated successfully.
+   </div>   	      
+   <div *ngIf="statusCode === 204" [ngClass] = "'success'">
+        Module deleted successfully.
+   </div>   	   
+   <div *ngIf="statusCode === 500" [ngClass] = "'error'">
+        Internal Server Error.
+   </div>   	
+ </div>
+ <ng-template #processing>
+	<img *ngIf="requestProcessing" src="assets/images/loading.gif">
+ </ng-template>
+</div>
+
+
+
+
+
+
+
+article.service
+
+import { Injectable } from '@angular/core';
+import { Http, Response, Headers, URLSearchParams, RequestOptions } from '@angular/http';
+import { Observable } from 'rxjs';
+import 'rxjs/add/operator/map';
+import 'rxjs/add/operator/catch';
+
+import { Article } from './article';
+
+@Injectable()
+export class ArticleService {
+    //URLs for CRUD operations
+    allArticlesUrl = "http://localhost:8080/IAG/modules";
+	articleUrl = "http://localhost:8080/IAG/module";
+	//Create constructor to get Http instance
+	constructor(private http:Http) { 
+	}
+	//Fetch all articles
+    getAllArticles(): Observable<Article[]> {
+        return this.http.get(this.allArticlesUrl)
+		   		.map(this.extractData)
+		        .catch(this.handleError);
+
+    }
+	//Create article
+    createArticle(article: Article):Observable<number> {
+	    let cpHeaders = new Headers({ 'Content-Type': 'application/json' });
+        let options = new RequestOptions({ headers: cpHeaders });
+        return this.http.post(this.articleUrl, article, options)
+               .map(success => success.status)
+               .catch(this.handleError);
+    }
+	//Fetch article by id
+    getArticleById(moduleId: string): Observable<Article> {
+		let cpHeaders = new Headers({ 'Content-Type': 'application/json' });
+		let cpParams = new URLSearchParams();
+		cpParams.set('id', moduleId);			
+		let options = new RequestOptions({ headers: cpHeaders, params: cpParams });
+		return this.http.get(this.articleUrl, options)
+			   .map(this.extractData)
+			   .catch(this.handleError);
+    }	
+	//Update article
+    updateArticle(article: Article):Observable<number> {
+	    let cpHeaders = new Headers({ 'Content-Type': 'application/json' });
+        let options = new RequestOptions({ headers: cpHeaders });
+        return this.http.put(this.articleUrl, article, options)
+               .map(success => success.status)
+               .catch(this.handleError);
+    }
+    //Delete article	
+    deleteArticleById(moduleId: string): Observable<number> {
+		let cpHeaders = new Headers({ 'Content-Type': 'application/json' });
+		let cpParams = new URLSearchParams();
+		cpParams.set('id', moduleId);			
+		let options = new RequestOptions({ headers: cpHeaders, params: cpParams });
+		return this.http.delete(this.articleUrl, options)
+			   .map(success => success.status)
+			   .catch(this.handleError);
+    }		
+	private extractData(res: Response) {
+	    let body = res.json();
+        return body;
+    }
+    private handleError (error: Response | any) {
+		console.error(error.message || error);
+		return Observable.throw(error.status);
+    }
+}
+
+
+
+
+
+import { Component, OnInit } from '@angular/core';
+import { FormControl, FormGroup, Validators } from '@angular/forms';
+
+import { ArticleService } from './article.service';
+import { Article } from './article';
+
+@Component({
+   selector: 'app-article',
+   templateUrl: './article.component.html',
+   styleUrls: ['./article.component.css']
+})
+export class ArticleComponent implements OnInit { 
+   //Component properties
+   allArticles: Article[];
+   statusCode: number;
+   requestProcessing = false;
+   articleIdToUpdate = null;
+   processValidation = false;
+   //Create form
+   articleForm = new FormGroup({
+       title: new FormControl('', Validators.required),
+       category: new FormControl('', Validators.required)	   
+   });
+   //Create constructor to get service instance
+   constructor(private articleService: ArticleService) {
+   }
+   //Create ngOnInit() and and load articles
+   ngOnInit(): void {
+	   this.getAllArticles();
+   }   
+   //Fetch all articles
+   getAllArticles() {
+        this.articleService.getAllArticles()
+		  .subscribe(
+                data => this.allArticles = data,
+                errorCode =>  this.statusCode = errorCode);   
+   }
+   //Handle create and update article
+   onArticleFormSubmit() {
+	  this.processValidation = true;   
+	  if (this.articleForm.invalid) {
+	       return; //Validation failed, exit from method.
+	  }   
+	  //Form is valid, now perform create or update
+      this.preProcessConfigurations();
+	  let name = this.articleForm.get('name').value.trim();
+      let DateCreated = this.articleForm.get('DateCreated').value.trim();
+	  let DateModified = this.articleForm.get('DateModified').value.trim();	  
+	  if (this.articleIdToUpdate === null) {  
+	    //Handle create article
+	    let article= new Article(null, name, DateCreated, DateModified);	  
+	    this.articleService.createArticle(article)
+	      .subscribe(successCode => {
+		            this.statusCode = successCode;
+				    this.getAllArticles();	
+					this.backToCreateArticle();
+			    },
+		        errorCode => this.statusCode = errorCode);
+	  } else {  
+   	    //Handle update article
+	    let article= new Article(this.articleIdToUpdate, name, DateCreated, DateModified);	  
+	    this.articleService.updateArticle(article)
+	      .subscribe(successCode => {
+		            this.statusCode = successCode;
+				    this.getAllArticles();	
+					this.backToCreateArticle();
+			    },
+		        errorCode => this.statusCode = errorCode);	  
+	  }
+   }
+   //Load article by id to edit
+   loadArticleToEdit(ModuleId: string) {
+      this.preProcessConfigurations();
+      this.articleService.getArticleById(ModuleId)
+	      .subscribe(article => {
+		            this.articleIdToUpdate = article.ModuleId;   
+		            this.articleForm.setValue({ name: article.name, DateCreated: article.DateCreated, DateModified: article.DateModified });
+					this.processValidation = true;
+					this.requestProcessing = false;   
+		        },
+		        errorCode =>  this.statusCode = errorCode);   
+   }
+   //Delete article
+   deleteArticle(ModuleId: string) {
+      this.preProcessConfigurations();
+      this.articleService.deleteArticleById(ModuleId)
+	      .subscribe(successCode => {
+		            this.statusCode = successCode;
+				    this.getAllArticles();	
+				    this.backToCreateArticle();
+			    },
+		        errorCode => this.statusCode = errorCode);    
+   }
+   //Perform preliminary processing configurations
+   preProcessConfigurations() {
+      this.statusCode = null;
+	  this.requestProcessing = true;   
+   }
+   //Go back from update to create
+   backToCreateArticle() {
+      this.articleIdToUpdate = null;
+      this.articleForm.reset();	  
+	  this.processValidation = false;
+   }
+}
+    
